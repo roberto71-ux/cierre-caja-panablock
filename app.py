@@ -42,10 +42,6 @@ CATS = [
 # ════════════════════════════════════════════════════════════════════
 @st.cache_resource
 def load_proveedores():
-    """
-    Lee proveedores.xlsx y devuelve un dict  KEYWORD_EN_MAYUSCULAS → Categoría.
-    Este dict le indica al clasificador a qué categoría pertenece cada proveedor.
-    """
     prov_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "proveedores.xlsx")
     if not os.path.exists(prov_path):
@@ -56,18 +52,12 @@ def load_proveedores():
     except Exception:
         return {}
 
-# Inyectar el mapa en el módulo core para que _classify_gasto lo use
 core._PROV_MAP = load_proveedores()
 
 # ════════════════════════════════════════════════════════════════════
 # HELPER: aplicar reclasificaciones del usuario a los datos de bancos
 # ════════════════════════════════════════════════════════════════════
 def _apply_reclassifications(bg, gb, edited_df):
-    """
-    Toma el DataFrame editado por el usuario (tabla de gastos "Otros")
-    y actualiza las categorías dentro de bg['gastos_detalle'] y
-    gb['gastos_detalle'], recalculando los totales por categoría.
-    """
     corrections = {}
     for _, row in edited_df.iterrows():
         key = (row['Banco'], str(row['Descripción']), float(row['Monto']))
@@ -78,7 +68,6 @@ def _apply_reclassifications(bg, gb, edited_df):
             key = (banco_name, itm['desc'], itm['monto'])
             if key in corrections:
                 itm['cat'] = corrections[key]
-        # Reconstruir totales por categoría desde gastos_detalle
         cats = {c: 0.0 for c in ITEMS_PAGOS}
         for itm in data.get('gastos_detalle', []):
             cats[itm['cat']] = round(cats.get(itm['cat'], 0.0) + itm['monto'], 2)
@@ -111,12 +100,11 @@ fecha = st.date_input(
 )
 
 st.markdown("#### Archivos de entrada")
-st.caption("Carga los 4 archivos del día. Los archivos solo existen durante esta "
+st.caption("Carga los archivos del día. Los archivos solo existen durante esta "
            "sesión — no quedan guardados en ningún servidor.")
 
 # ════════════════════════════════════════════════════════════════════
 # CARGADORES DE ARCHIVOS
-# (st.file_uploader: el usuario arrastra o selecciona el archivo)
 # ════════════════════════════════════════════════════════════════════
 col1, col2 = st.columns(2)
 with col1:
@@ -124,7 +112,8 @@ with col1:
         "📄 Facturas del día (PDF)",
         type=["pdf"],
         key="up_fact",
-        help="PDF con todas las facturas emitidas hoy",
+        accept_multiple_files=True,
+        help="Puedes subir uno o varios PDFs — se procesan todos juntos",
     )
     f_bg = st.file_uploader(
         "🏦 Extracto Banco General (PDF)",
@@ -137,7 +126,8 @@ with col2:
         "📄 Recibos del día (PDF)",
         type=["pdf"],
         key="up_rec",
-        help="PDF con los recibos de cobros a clientes",
+        accept_multiple_files=True,
+        help="Puedes subir uno o varios PDFs — se procesan todos juntos",
     )
     f_gb = st.file_uploader(
         "🏦 Extracto Global Bank (XLS)",
@@ -146,28 +136,26 @@ with col2:
         help="Extracto del día de Global Bank en formato .xls",
     )
 
-todos_cargados = all([f_fact, f_rec, f_bg, f_gb])
-
-if not todos_cargados:
-    archivos_faltantes = [
-        nombre for nombre, f in [
-            ("Facturas", f_fact), ("Recibos", f_rec),
-            ("Banco General", f_bg), ("Global Bank", f_gb),
-        ] if not f
-    ]
-    st.info(f"⬆️ Faltan: {', '.join(archivos_faltantes)}")
+# ── Estado de archivos cargados (informativo, no bloqueante) ────────
+_estados = [
+    ("📄 Facturas",      bool(f_fact)),
+    ("📄 Recibos",       bool(f_rec)),
+    ("🏦 Banco General", bool(f_bg)),
+    ("🏦 Global Bank",   bool(f_gb)),
+]
+st.caption("  ".join(
+    f"{'✅' if ok else '⚪'} {nombre}"
+    for nombre, ok in _estados
+))
 
 st.markdown("---")
 
 # ════════════════════════════════════════════════════════════════════
 # BOTÓN PROCESAR
 # ════════════════════════════════════════════════════════════════════
-# st.button devuelve True solo en la re-ejecución donde fue presionado.
-# En todas las demás re-ejecuciones devuelve False.
 procesar = st.button(
     "⚙️  Procesar archivos",
     type="primary",
-    disabled=not todos_cargados,
     use_container_width=True,
 )
 
@@ -191,8 +179,6 @@ if procesar:
             log("\nLeyendo extracto Global Bank…")
             gb   = parse_global_bank(f_gb, log)
 
-            # Recopilar gastos que quedaron sin categoría (clasificados como "Otros"
-            # porque el proveedor no está en proveedores.xlsx ni en las keywords)
             otros = (
                 [{'Banco': 'Banco General', 'Descripción': i['desc'],
                   'Monto': i['monto'], 'Categoría': 'Otros'}
@@ -203,7 +189,6 @@ if procesar:
                  for i in gb.get('gastos_detalle', []) if i['cat'] == 'Otros']
             )
 
-            # Guardar todo en session_state para que sobreviva el próximo clic
             st.session_state.update({
                 'fact':        fact,
                 'rec':         rec,
@@ -213,7 +198,7 @@ if procesar:
                 'fecha':       fecha,
                 'processed':   True,
                 'otros_df':    pd.DataFrame(otros) if otros else None,
-                'excel_bytes': None,   # borrar descarga anterior si la había
+                'excel_bytes': None,
             })
 
         except Exception as e:
@@ -223,7 +208,7 @@ if procesar:
             st.stop()
 
 # ════════════════════════════════════════════════════════════════════
-# RESULTADOS  (se muestran si ya se procesaron archivos)
+# RESULTADOS
 # ════════════════════════════════════════════════════════════════════
 if st.session_state.get('processed'):
     fact = st.session_state['fact']
@@ -233,7 +218,6 @@ if st.session_state.get('processed'):
 
     st.success("✅ Archivos procesados correctamente.")
 
-    # ── Resumen rápido ──────────────────────────────────────────────
     st.markdown("#### Resumen del día")
 
     total_contado  = round(fact['contado_subtotal'] + fact['contado_itbms'], 2)
@@ -241,31 +225,24 @@ if st.session_state.get('processed'):
     gastos_merged  = _merge_gastos(bg['gastos'], gb['gastos'])
     total_gastos   = round(sum(gastos_merged.values()), 2)
 
-    # Fila 1: Ventas + Cobros + Gastos
     c1, c2, c3 = st.columns(3)
     c1.metric("🧾 Ventas Contado",     f"${total_contado:,.2f}")
     c2.metric("💰 Cobros a Clientes",  f"${rec:,.2f}")
     c3.metric("💳 Total Gastos",        f"${total_gastos:,.2f}")
 
-    # Fila 2: Datos de bancos
     c4, c5, c6 = st.columns(3)
     c4.metric("🏦 BG Depósitos",        f"${bg['depositos']:,.2f}")
     c5.metric("🏦 GB Depósitos",        f"${gb['depositos']:,.2f}")
     c6.metric("📈 Ventas Crédito",      f"${total_credito:,.2f}")
 
-    # Alerta si hay notas de crédito
     ncs = fact.get('notas_credito', [])
     if ncs:
         st.warning(f"⚠️ {len(ncs)} nota(s) de crédito detectada(s) — "
                    "aparecen en la sección roja al final del reporte Excel.")
 
-    # ── Log de procesamiento ────────────────────────────────────────
     with st.expander("📋 Ver detalle del procesamiento (log)"):
         st.code('\n'.join(st.session_state.get('logs', [])), language=None)
 
-    # ── Reclasificación de gastos "Otros" ──────────────────────────
-    # Si el clasificador no reconoció algún proveedor, le mostramos
-    # una tabla editable para que el usuario asigne la categoría correcta.
     otros_df  = st.session_state.get('otros_df')
     edited_df = None
 
@@ -277,8 +254,6 @@ if st.session_state.get('processed'):
             "Selecciona la categoría correcta en la columna derecha:"
         )
 
-        # st.data_editor muestra una tabla interactiva donde el usuario puede
-        # cambiar el valor de la columna "Categoría" con un menú desplegable.
         edited_df = st.data_editor(
             otros_df,
             column_config={
@@ -307,7 +282,6 @@ if st.session_state.get('processed'):
                    "en el futuro, avísale a Roberto para actualizarlas en la base "
                    "de datos.")
 
-    # ── Botón Generar Excel ─────────────────────────────────────────
     st.markdown("---")
     generar = st.button(
         "📊  Generar Reporte Excel",
@@ -316,7 +290,6 @@ if st.session_state.get('processed'):
     )
 
     if generar:
-        # Aplicar las reclasificaciones del usuario (si las hay)
         if edited_df is not None and not edited_df.empty:
             _apply_reclassifications(bg, gb, edited_df)
 
@@ -329,7 +302,7 @@ if st.session_state.get('processed'):
                     recibos=rec,
                     bg=bg,
                     gb=gb,
-                    output_path=None,   # None → retorna BytesIO para descarga web
+                    output_path=None,
                 )
                 fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')
                 fname = f"Cierre_Caja_{fecha_tag}_Panablock.xlsx"
@@ -340,9 +313,6 @@ if st.session_state.get('processed'):
                 with st.expander("Detalle técnico"):
                     st.code(traceback.format_exc())
 
-    # ── Botón de descarga ───────────────────────────────────────────
-    # Se muestra si ya se generó un reporte en esta sesión.
-    # st.download_button descarga el archivo directamente al PC del usuario.
     if st.session_state.get('excel_bytes'):
         st.success("✅ Reporte listo para descargar.")
         st.download_button(

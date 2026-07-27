@@ -18,13 +18,8 @@ import cierre_caja_core as core
 from cierre_caja_core import (
     parse_facturas, parse_recibos,
     parse_banco_general, parse_global_bank,
-    generate_report, generate_pdf_report,
-    _merge_gastos, ITEMS_PAGOS, FORMAS_ORDEN,
+    generate_report, _merge_gastos, ITEMS_PAGOS,
 )
-
-# Logo incluido junto a este archivo en el repositorio
-LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         'logo_panablock.jpg')
 
 # ════════════════════════════════════════════════════════════════════
 # CONFIGURACIÓN DE PÁGINA
@@ -153,17 +148,34 @@ with col2:
         help="Extracto del día de Global Bank en formato .xls",
     )
 
-# ── Estado de archivos cargados (informativo, no bloqueante) ────────
-_estados = [
-    ("📄 Facturas",      bool(f_fact)),
-    ("📄 Recibos",       bool(f_rec)),
-    ("🏦 Banco General", bool(f_bg)),
-    ("🏦 Global Bank",   bool(f_gb)),
-]
-st.caption("  ".join(
-    f"{'✅' if ok else '⚪'} {nombre}"
-    for nombre, ok in _estados
-))
+todos_cargados = all([f_fact, f_rec, f_bg])  # Global Bank es opcional
+
+if not todos_cargados:
+    archivos_faltantes = [
+        nombre for nombre, f in [
+            ("Facturas", f_fact), ("Recibos", f_rec),
+            ("Banco General", f_bg),
+        ] if not f
+    ]
+    st.info(f"⬆️ Faltan: {', '.join(archivos_faltantes)}")
+
+# ── Global Bank sin extracto: solicitar saldos manualmente ──────────────
+if not f_gb:
+    st.markdown("##### 🏦 Global Bank — sin movimientos hoy")
+    st.caption("No se cargó extracto de Global Bank. Ingresa los saldos para completar el reporte:")
+    _col_gb1, _col_gb2 = st.columns(2)
+    with _col_gb1:
+        st.number_input(
+            "Saldo Anterior Global Bank ($)",
+            min_value=0.0, value=0.0, step=0.01, format="%.2f",
+            key="gb_saldo_ant_manual",
+        )
+    with _col_gb2:
+        st.number_input(
+            "Cheques en Circulación Global Bank ($)",
+            min_value=0.0, value=0.0, step=0.01, format="%.2f",
+            key="gb_cheques_manual",
+        )
 
 st.markdown("---")
 
@@ -175,6 +187,7 @@ st.markdown("---")
 procesar = st.button(
     "⚙️  Procesar archivos",
     type="primary",
+    disabled=not todos_cargados,
     use_container_width=True,
 )
 
@@ -186,11 +199,8 @@ if procesar:
     with st.spinner("Leyendo y procesando archivos…"):
         try:
             log("─" * 50)
-            log("Pre-scan de recibos para detectar facturas cobradas hoy…")
-            paid_refs = core._get_paid_factura_refs(f_rec, log)
-
-            log("\nLeyendo facturas…")
-            fact = parse_facturas(f_fact, log, paid_by_recibo=paid_refs)
+            log("Leyendo facturas…")
+            fact = parse_facturas(f_fact, log)
 
             log("\nLeyendo recibos…")
             rec  = parse_recibos(f_rec, log)
@@ -200,6 +210,10 @@ if procesar:
 
             log("\nLeyendo extracto Global Bank…")
             gb   = parse_global_bank(f_gb, log)
+            # Sin extracto: inyectar el saldo anterior ingresado manualmente
+            if not f_gb:
+                gb['saldo_anterior'] = st.session_state.get('gb_saldo_ant_manual', 0.0)
+                log(f"  GB (sin extracto) saldo anterior: ${gb['saldo_anterior']:,.2f}")
 
             # Recopilar gastos que quedaron sin categoría (clasificados como "Otros"
             # porque el proveedor no está en proveedores.xlsx ni en las keywords)
@@ -223,8 +237,9 @@ if procesar:
                 'fecha':       fecha,
                 'processed':   True,
                 'otros_df':    pd.DataFrame(otros) if otros else None,
-                'excel_bytes': None,   # borrar descargas anteriores
-                'pdf_bytes':   None,
+                'excel_bytes': None,   # borrar descarga anterior si la había
+                'gb_cheques':  (st.session_state.get('gb_cheques_manual', 0.0)
+                                if not f_gb else 0.0),
             })
 
         except Exception as e:
@@ -264,28 +279,11 @@ if st.session_state.get('processed'):
     c5.metric("🏦 GB Depósitos",        f"${gb['depositos']:,.2f}")
     c6.metric("📈 Ventas Crédito",      f"${total_credito:,.2f}")
 
-    # ── Desglose de cobros por forma de pago ───────────────────────
-    por_forma = rec.get('por_forma', {})
-    formas_activas = [(f, por_forma.get(f, 0.0)) for f in FORMAS_ORDEN
-                      if por_forma.get(f, 0.0) > 0]
-    if formas_activas:
-        st.markdown("##### 💳 Desglose de cobros por forma de pago")
-        df_formas = pd.DataFrame(formas_activas, columns=['Forma de Pago', 'Monto'])
-        st.dataframe(
-            df_formas,
-            column_config={
-                'Forma de Pago': st.column_config.TextColumn('Forma de Pago', width='medium'),
-                'Monto': st.column_config.NumberColumn('Monto', format='$%.2f', width='small'),
-            },
-            hide_index=True,
-            use_container_width=False,
-        )
-
     # Alerta si hay notas de crédito
     ncs = fact.get('notas_credito', [])
     if ncs:
         st.warning(f"⚠️ {len(ncs)} nota(s) de crédito detectada(s) — "
-                   "aparecen en la sección roja al final del reporte Excel y PDF.")
+                   "aparecen en la sección roja al final del reporte Excel.")
 
     # ── Log de procesamiento ────────────────────────────────────────
     with st.expander("📋 Ver detalle del procesamiento (log)"):
@@ -335,34 +333,10 @@ if st.session_state.get('processed'):
                    "en el futuro, avísale a Roberto para actualizarlas en la base "
                    "de datos.")
 
-    # ── Cheques en Circulación ─────────────────────────────────────
-    st.markdown("---")
-    st.markdown("#### 🏦 Cheques en Circulación")
-    st.caption("Cheques emitidos pendientes de cobro al cierre del día.")
-    chq_col1, chq_col2 = st.columns(2)
-    with chq_col1:
-        cheques_bg = st.number_input(
-            "Banco General ($)",
-            min_value=0.0,
-            value=0.0,
-            step=0.01,
-            format="%.2f",
-            key="chq_bg",
-        )
-    with chq_col2:
-        cheques_gb = st.number_input(
-            "Global Bank ($)",
-            min_value=0.0,
-            value=0.0,
-            step=0.01,
-            format="%.2f",
-            key="chq_gb",
-        )
-
-    # ── Botón Generar Reportes ──────────────────────────────────────
+    # ── Botón Generar Excel ─────────────────────────────────────────
     st.markdown("---")
     generar = st.button(
-        "📊  Generar Reportes (Excel + PDF)",
+        "📊  Generar Reporte Excel",
         type="primary",
         use_container_width=True,
     )
@@ -372,57 +346,40 @@ if st.session_state.get('processed'):
         if edited_df is not None and not edited_df.empty:
             _apply_reclassifications(bg, gb, edited_df)
 
-        with st.spinner("Generando reportes Excel y PDF…"):
+        with st.spinner("Generando reporte Excel…"):
             try:
                 fecha_str = st.session_state['fecha'].strftime('%d/%m/%Y')
-                fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')
-
-                common = dict(
+                buf = generate_report(
                     fecha_str=fecha_str,
                     facturas=fact,
-                    recibos=rec['total'],
+                    recibos=rec,
                     bg=bg,
                     gb=gb,
-                    output_path=None,
-                    cheques_bg=cheques_bg,
-                    cheques_gb=cheques_gb,
+                    output_path=None,   # None → retorna BytesIO para descarga web
+                    cheques_gb=st.session_state.get('gb_cheques', 0.0),
                     cobros_por_forma=rec['por_forma'],
-                    logo_path=LOGO_PATH,
                 )
-
-                buf_xlsx = generate_report(**common)
-                buf_pdf  = generate_pdf_report(**common)
-
-                st.session_state['excel_bytes'] = buf_xlsx.getvalue()
-                st.session_state['excel_fname'] = f'Cierre_Caja_{fecha_tag}_Panablock.xlsx'
-                st.session_state['pdf_bytes']   = buf_pdf.getvalue()
-                st.session_state['pdf_fname']   = f'Cierre_Caja_{fecha_tag}_Panablock.pdf'
-
+                fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')
+                fname = f"Cierre_Caja_{fecha_tag}_Panablock.xlsx"
+                st.session_state['excel_bytes'] = buf.getvalue()
+                st.session_state['excel_fname'] = fname
             except Exception as e:
-                st.error(f"❌ Error al generar los reportes: {e}")
+                st.error(f"❌ Error al generar el reporte: {e}")
                 with st.expander("Detalle técnico"):
                     st.code(traceback.format_exc())
 
-    # ── Botones de descarga ─────────────────────────────────────────
+    # ── Botón de descarga ───────────────────────────────────────────
+    # Se muestra si ya se generó un reporte en esta sesión.
+    # st.download_button descarga el archivo directamente al PC del usuario.
     if st.session_state.get('excel_bytes'):
-        st.success("✅ Reportes listos para descargar.")
-        dl1, dl2 = st.columns(2)
-        with dl1:
-            st.download_button(
-                label="⬇️  Descargar Excel",
-                data=st.session_state['excel_bytes'],
-                file_name=st.session_state['excel_fname'],
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-        with dl2:
-            st.download_button(
-                label="⬇️  Descargar PDF",
-                data=st.session_state['pdf_bytes'],
-                file_name=st.session_state['pdf_fname'],
-                mime="application/pdf",
-                use_container_width=True,
-            )
+        st.success("✅ Reporte listo para descargar.")
+        st.download_button(
+            label="⬇️  Descargar Excel",
+            data=st.session_state['excel_bytes'],
+            file_name=st.session_state['excel_fname'],
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
 # ════════════════════════════════════════════════════════════════════
 # PIE DE PÁGINA

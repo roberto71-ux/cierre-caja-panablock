@@ -358,30 +358,35 @@ if st.session_state.get('processed'):
             _apply_reclassifications(bg, gb, edited_df)
 
         with st.spinner("Generando reportes…"):
+            fecha_str = st.session_state['fecha'].strftime('%d/%m/%Y')
+            fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')
+            common = dict(
+                fecha_str=fecha_str,
+                facturas=fact,
+                recibos=rec,
+                bg=bg,
+                gb=gb,
+                output_path=None,
+                cheques_bg=st.session_state.get('bg_cheques', 0.0),
+                cheques_gb=st.session_state.get('gb_cheques', 0.0),
+                cobros_por_forma=rec['por_forma'],
+            )
+            # Excel — siempre
             try:
-                fecha_str = st.session_state['fecha'].strftime('%d/%m/%Y')
-                fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')
-                common = dict(
-                    fecha_str=fecha_str,
-                    facturas=fact,
-                    recibos=rec,
-                    bg=bg,
-                    gb=gb,
-                    output_path=None,
-                    cheques_bg=st.session_state.get('bg_cheques', 0.0),
-                    cheques_gb=st.session_state.get('gb_cheques', 0.0),
-                    cobros_por_forma=rec['por_forma'],
-                )
                 buf_xlsx = generate_report(**common)
-                buf_pdf  = generate_pdf_report(**common)
                 st.session_state['excel_bytes'] = buf_xlsx.getvalue()
                 st.session_state['excel_fname'] = f"Cierre_Caja_{fecha_tag}_Panablock.xlsx"
-                st.session_state['pdf_bytes']   = buf_pdf.getvalue()
-                st.session_state['pdf_fname']   = f"Cierre_Caja_{fecha_tag}_Panablock.pdf"
             except Exception as e:
-                st.error(f"❌ Error al generar los reportes: {e}")
+                st.error(f"❌ Error al generar Excel: {e}")
                 with st.expander("Detalle técnico"):
                     st.code(traceback.format_exc())
+            # PDF — independiente; si falla no bloquea el Excel
+            try:
+                buf_pdf = generate_pdf_report(**common)
+                st.session_state['pdf_bytes'] = buf_pdf.getvalue()
+                st.session_state['pdf_fname'] = f"Cierre_Caja_{fecha_tag}_Panablock.pdf"
+            except Exception as e:
+                st.warning(f"⚠️ PDF no disponible: {e}")
 
     # ── Botones de descarga ─────────────────────────────────────────
     if st.session_state.get('excel_bytes'):
@@ -396,13 +401,16 @@ if st.session_state.get('processed'):
                 use_container_width=True,
             )
         with dl2:
-            st.download_button(
-                label="⬇️  Descargar PDF",
-                data=st.session_state['pdf_bytes'],
-                file_name=st.session_state['pdf_fname'],
-                mime="application/pdf",
-                use_container_width=True,
-            )
+            if st.session_state.get('pdf_bytes'):
+                st.download_button(
+                    label="⬇️  Descargar PDF",
+                    data=st.session_state['pdf_bytes'],
+                    file_name=st.session_state['pdf_fname'],
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            else:
+                st.info("PDF no disponible en este entorno.")
 
 # ════════════════════════════════════════════════════════════════════
 # PIE DE PÁGINA

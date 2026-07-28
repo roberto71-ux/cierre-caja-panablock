@@ -67,12 +67,16 @@ GASTO_KEYWORDS = [
     ('Transporte',              ['transporte', 'flete', 'envio', 'envío',
                                   'courier', 'acarreo', 'traslado']),
     ('Acreedores',              ['proveedor', 'acreedor', 'pago a proveedor']),
+    ('Comisiones Bancarias',    ['cobro comision', 'cobro transaccion',
+                                  'itbms comision', 'cobro t/c', 'itbms t/c',
+                                  'comision epos', 'transaccion tc epos']),
+    ('Egresos Varios',          ['cheque presentado', 'compensacion']),
 ]
 
 ITEMS_PAGOS = [
     'Acreedores', 'Mantenimiento de Planta', 'Materia Prima',
     'Pigmento y Aditivos', 'Servicios Básicos', 'Tarimas',
-    'Transporte', 'Otros',
+    'Transporte', 'Comisiones Bancarias', 'Egresos Varios', 'Otros',
 ]
 
 FORMAS_ORDEN = ['Efectivo', 'ACH / Transferencia', 'Yappy', 'Tarjeta', 'Otros']

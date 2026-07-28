@@ -18,7 +18,7 @@ import cierre_caja_core as core
 from cierre_caja_core import (
     parse_facturas, parse_recibos,
     parse_banco_general, parse_global_bank,
-    generate_report, _merge_gastos, ITEMS_PAGOS,
+    generate_report, generate_pdf_report, _merge_gastos, ITEMS_PAGOS,
 )
 
 # ════════════════════════════════════════════════════════════════════
@@ -248,6 +248,7 @@ if procesar:
                 'processed':   True,
                 'otros_df':    pd.DataFrame(otros) if otros else None,
                 'excel_bytes': None,   # borrar descarga anterior si la había
+                'pdf_bytes':   None,
                 'bg_cheques':  st.session_state.get('bg_cheques_manual', 0.0),
                 'gb_cheques':  st.session_state.get('gb_cheques_manual', 0.0),
             })
@@ -343,7 +344,7 @@ if st.session_state.get('processed'):
                    "en el futuro, avísale a Roberto para actualizarlas en la base "
                    "de datos.")
 
-    # ── Botón Generar Excel ─────────────────────────────────────────
+    # ── Botón Generar Reportes ──────────────────────────────────────
     st.markdown("---")
     generar = st.button(
         "📊  Generar Reporte Excel",
@@ -356,41 +357,52 @@ if st.session_state.get('processed'):
         if edited_df is not None and not edited_df.empty:
             _apply_reclassifications(bg, gb, edited_df)
 
-        with st.spinner("Generando reporte Excel…"):
+        with st.spinner("Generando reportes…"):
             try:
                 fecha_str = st.session_state['fecha'].strftime('%d/%m/%Y')
-                buf = generate_report(
+                fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')
+                common = dict(
                     fecha_str=fecha_str,
                     facturas=fact,
                     recibos=rec,
                     bg=bg,
                     gb=gb,
-                    output_path=None,   # None → retorna BytesIO para descarga web
+                    output_path=None,
                     cheques_bg=st.session_state.get('bg_cheques', 0.0),
                     cheques_gb=st.session_state.get('gb_cheques', 0.0),
                     cobros_por_forma=rec['por_forma'],
                 )
-                fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')
-                fname = f"Cierre_Caja_{fecha_tag}_Panablock.xlsx"
-                st.session_state['excel_bytes'] = buf.getvalue()
-                st.session_state['excel_fname'] = fname
+                buf_xlsx = generate_report(**common)
+                buf_pdf  = generate_pdf_report(**common)
+                st.session_state['excel_bytes'] = buf_xlsx.getvalue()
+                st.session_state['excel_fname'] = f"Cierre_Caja_{fecha_tag}_Panablock.xlsx"
+                st.session_state['pdf_bytes']   = buf_pdf.getvalue()
+                st.session_state['pdf_fname']   = f"Cierre_Caja_{fecha_tag}_Panablock.pdf"
             except Exception as e:
-                st.error(f"❌ Error al generar el reporte: {e}")
+                st.error(f"❌ Error al generar los reportes: {e}")
                 with st.expander("Detalle técnico"):
                     st.code(traceback.format_exc())
 
-    # ── Botón de descarga ───────────────────────────────────────────
-    # Se muestra si ya se generó un reporte en esta sesión.
-    # st.download_button descarga el archivo directamente al PC del usuario.
+    # ── Botones de descarga ─────────────────────────────────────────
     if st.session_state.get('excel_bytes'):
-        st.success("✅ Reporte listo para descargar.")
-        st.download_button(
-            label="⬇️  Descargar Excel",
-            data=st.session_state['excel_bytes'],
-            file_name=st.session_state['excel_fname'],
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
+        st.success("✅ Reportes listos para descargar.")
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            st.download_button(
+                label="⬇️  Descargar Excel",
+                data=st.session_state['excel_bytes'],
+                file_name=st.session_state['excel_fname'],
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        with dl2:
+            st.download_button(
+                label="⬇️  Descargar PDF",
+                data=st.session_state['pdf_bytes'],
+                file_name=st.session_state['pdf_fname'],
+                mime="application/pdf",
+                use_container_width=True,
+            )
 
 # ════════════════════════════════════════════════════════════════════
 # PIE DE PÁGINA

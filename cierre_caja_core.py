@@ -9,6 +9,7 @@ Sin dependencias de GUI. Importado por:
 import re
 import io
 import os
+import unicodedata
 import pandas as pd
 import pdfplumber
 from openpyxl import Workbook
@@ -51,6 +52,19 @@ NO_BORDER = Border()
 # Clave: keyword en MAYÚSCULAS. Valor: categoría.
 _PROV_MAP = {}
 
+def _norm_desc(s):
+    """
+    Normaliza texto para comparación robusta:
+    - Colapsa espacios (incluyendo non-breaking spaces del PDF)
+    - Elimina tildes/diacríticos (COMISIÓN → COMISION, etc.)
+    Los PDFs de Banco General a veces usan caracteres acentuados.
+    """
+    s = ' '.join(s.split())
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn'
+    )
+
 # Keywords genéricas como segunda línea de defensa
 GASTO_KEYWORDS = [
     ('Materia Prima',           ['cemento', 'arena', 'agregado', 'bloque',
@@ -86,15 +100,18 @@ def _classify_gasto(desc_lower):
     Clasifica un gasto por descripción.
     Orden de búsqueda:
       1. proveedores.xlsx  (keywords exactas, comparación en MAYÚSCULAS)
-      2. GASTO_KEYWORDS    (palabras clave genéricas)
+      2. GASTO_KEYWORDS    (palabras clave genéricas, sin tildes para robustez)
       3. 'Otros'           (fallback)
     """
     desc_upper = desc_lower.upper()
     for keyword, cat in _PROV_MAP.items():
         if keyword in desc_upper:
             return cat
+    # Normalizar tildes y espacios antes de comparar GASTO_KEYWORDS
+    # (PDFs de BG usan COMISIÓN con tilde; keywords escritas sin tilde)
+    desc_norm = _norm_desc(desc_lower)
     for cat, kws in GASTO_KEYWORDS:
-        if any(k in desc_lower for k in kws):
+        if any(_norm_desc(k) in desc_norm for k in kws):
             return cat
     return 'Otros'
 

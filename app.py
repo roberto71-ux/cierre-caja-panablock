@@ -274,7 +274,7 @@ if st.session_state.get('processed'):
 
     total_contado  = round(fact['contado_subtotal'] + fact['contado_itbms'], 2)
     total_credito  = round(fact['credito_subtotal'] + fact['credito_itbms'], 2)
-    gastos_merged  = _merge_gastos(bg['gastos'], gb['astos'])
+    gastos_merged  = _merge_gastos(bg['gastos'], gb['gastos'])
     total_gastos   = round(sum(gastos_merged.values()), 2)
 
     # Fila 1: Ventas + Cobros + Gastos

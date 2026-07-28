@@ -112,7 +112,7 @@ fecha = st.date_input(
 
 st.markdown("#### Archivos de entrada")
 st.caption("Carga los 4 archivos del día. Los archivos solo existen durante esta "
-           "sesión — no quedan guardados en ningún servidor.")
+           "sesión — ~no quedan guardados en ningún servidor.")
 
 # ════════════════════════════════════════════════════════════════════
 # CARGADORES DE ARCHIVOS
@@ -148,53 +148,49 @@ with col2:
         help="Extracto del día de Global Bank en formato .xls",
     )
 
-todos_cargados = all([f_fact, f_rec, f_bg])  # Global Bank es opcional
+# Mostrar archivos pendientes como información (no bloquea el procesamiento)
+archivos_faltantes = [
+    nombre for nombre, f in [
+        ("Facturas", f_fact), ("Recibos", f_rec),
+        ("Banco General", f_bg),
+    ] if not f
+]�f not f_gb:
+    archivos_faltantes.append("Global Bank (opcional)")
+if archivos_faltantes:
+    st.info(f"⬆️ Sin cargar: {', '.join(archivos_faltantes)} — se asumirán valores cero.")
 
-if not todos_cargados:
-    archivos_faltantes = [
-        nombre for nombre, f in [
-            ("Facturas", f_fact), ("Recibos", f_rec),
-            ("Banco General", f_bg),
-        ] if not f
-    ]
-    if not f_gb:
-        archivos_faltantes.append("Global Bank (opcional)")
-    st.info(f"⬆️ Faltan: {', '.join(archivos_faltantes)}")
-elif not f_gb:
-    st.info("⬆️ Falta: Global Bank (opcional)")
-
-# ── Campos opcionales: solo aparecen una vez que los 3 archivos obligatorios están cargados ──
-if todos_cargados:
-    # Global Bank sin extracto: el usuario confirma que no tiene el archivo
-    if not f_gb:
-        no_gb = st.checkbox(
-            "No tengo extracto de Global Bank para hoy",
-            key="no_gb_check",
-        )
-        if no_gb:
-            st.caption("Ingresa el saldo anterior de Global Bank para completar el reporte:")
-            st.number_input(
-                "Saldo Anterior Global Bank ($)",
-                min_value=0.0, value=0.0, step=0.01, format="%.2f",
-                key="gb_saldo_ant_manual",
-            )
-
-    # Cheques en circulación: visibles para ambos bancos
-    st.markdown("##### 🔲 Cheques en Circulación")
-    st.caption("Ingresa el monto de cheques emitidos pendientes de cobro en cada banco (0 si no hay):")
-    _col_ch1, _col_ch2 = st.columns(2)
-    with _col_ch1:
+# ── Campos opcionales ──
+# Global Bank sin extracto: el usuario confirma que no tiene el archivo
+if not f_gb:
+    no_gb = st.checkbox(
+        "No tengo extracto de Global Bank para hoy",
+        key="no_gb_check",
+    )
+    if no_gb:
+        st.caption("Ingresa el saldo anterior de Global Bank para completar el reporte:")
         st.number_input(
-            "Cheques en Circulación Banco General ($)",
+            "Saldo Anterior Global Bank ($)",
             min_value=0.0, value=0.0, step=0.01, format="%.2f",
-            key="bg_cheques_manual",
+            key="gb_saldo_ant_manual",
         )
-    with _col_ch2:
-        st.number_input(
-            "Cheques en Circulación Global Bank ($)",
-            min_value=0.0, value=0.0, step=0.01, format="%.2f",
-            key="gb_cheques_manual",
-        )
+
+# Cheques en circulación: visibles para ambos bancos
+st.markdown("##### 🔲 Cheques en Circulación")
+st.caption("Ingresa el monto de cheques emitidos pendientes de cobro en cada banco (0 si no hay):")
+_col_ch1, _col_ch2 = st.columns(2)
+with _col_ch1:
+    st.number_input(
+        "Cheques en Circulación Banco General ($)",
+        min_value=0.0, value=0.0, step=0.01, format="%.2f",
+        key="bg_cheques_manual",
+    )
+with _col_ch2:
+    st.number_input(
+        "Cheques en Circulación Global Bank ($)",
+        min_value=0.0, value=0.0, step=0.01, format="%.2f",
+        key="gb_cheques_manual",
+    )
+
 st.markdown("---")
 
 # ════════════════════════════════════════════════════════════════════
@@ -203,9 +199,8 @@ st.markdown("---")
 # st.button devuelve True solo en la re-ejecución donde fue presionado.
 # En todas las demás re-ejecuciones devuelve False.
 procesar = st.button(
-    "⚙️  Procesar archivos",
+    "♪�️  Procesar archivos",
     type="primary",
-    disabled=not todos_cargados,
     use_container_width=True,
 )
 
@@ -231,8 +226,9 @@ if procesar:
             # Sin extracto: inyectar el saldo anterior ingresado manualmente
             if not f_gb:
                 gb['saldo_anterior'] = st.session_state.get('gb_saldo_ant_manual', 0.0)
-                log(f"  GB (sin extracto) saldo anterior: ${gb['saldo_anterior']:,.2f}")
+                log(f"  GB (sin extracto) saldo anterior: ${gb['saldo_anterior']}:,.2f}")
 
+            # Guardar todo en session_state para que sobreviva el próximo clic
             st.session_state.update({
                 'fact':        fact,
                 'rec':         rec,
@@ -262,7 +258,7 @@ if st.session_state.get('processed'):
     bg   = st.session_state['bg']
     gb   = st.session_state['gb']
 
-    st.success("� Archivos procesados correctamente.")
+    st.success("✅ Archivos procesados correctamente.")
 
     # ── Resumen rápido ──────────────────────────────────────────────
     st.markdown("#### Resumen del día")
@@ -287,13 +283,12 @@ if st.session_state.get('processed'):
     # Alerta si hay notas de crédito
     ncs = fact.get('notas_credito', [])
     if ncs:
-        st.warning(f"⚠️ {len(ncs)} nota(s) de crédito detectada(s) —"
+        st.warning(f"⚠️ {len(ncs)} nota(s) de crédito detectada(s) — "
                    "aparecen en la sección roja al final del reporte Excel.")
 
     # ── Log de procesamiento ────────────────────────────────────────
     with st.expander("📋 Ver detalle del procesamiento (log)"):
         st.code('\n'.join(st.session_state.get('logs', [])), language=None)
-
 
     # ── Botón Generar Reportes ──────────────────────────────────────
     st.markdown("---")

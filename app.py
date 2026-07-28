@@ -347,7 +347,7 @@ if st.session_state.get('processed'):
     # ── Botón Generar Reportes ──────────────────────────────────────
     st.markdown("---")
     generar = st.button(
-        "📊  Generar Reporte Excel",
+        "📊  Generar Reportes (Excel y PDF)",
         type="primary",
         use_container_width=True,
     )

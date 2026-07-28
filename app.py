@@ -159,33 +159,34 @@ if not todos_cargados:
     ]
     st.info(f"⬆️ Faltan: {', '.join(archivos_faltantes)}")
 
-# ── Global Bank sin extracto: solicitar saldo anterior manualmente ──
-if not f_gb:
-    st.markdown("##### 🏦 Global Bank — sin movimientos hoy")
-    st.caption("No se cargó extracto de Global Bank. Ingresa el saldo anterior para completar el reporte:")
-    st.number_input(
-        "Saldo Anterior Global Bank ($)",
-        min_value=0.0, value=0.0, step=0.01, format="%.2f",
-        key="gb_saldo_ant_manual",
-    )
+# ── Campos opcionales: solo aparecen una vez que los 3 archivos obligatorios están cargados ──
+if todos_cargados:
+    # Global Bank sin extracto: solicitar saldo anterior manualmente
+    if not f_gb:
+        st.markdown("##### 🏦 Global Bank — sin movimientos hoy")
+        st.caption("No se cargó extracto de Global Bank. Ingresa el saldo anterior para completar el reporte:")
+        st.number_input(
+            "Saldo Anterior Global Bank ($)",
+            min_value=0.0, value=0.0, step=0.01, format="%.2f",
+            key="gb_saldo_ant_manual",
+        )
 
-# ── Cheques en circulación: siempre visibles para ambos bancos ──
-st.markdown("##### 🔲 Cheques en Circulación")
-st.caption("Ingresa el monto de cheques emitidos pendientes de cobro en cada banco (0 si no hay):")
-_col_ch1, _col_ch2 = st.columns(2)
-with _col_ch1:
-    st.number_input(
-        "Cheques en Circulación Banco General ($)",
-        min_value=0.0, value=0.0, step=0.01, format="%.2f",
-        key="bg_cheques_manual",
-    )
-with _col_ch2:
-    st.number_input(
-        "Cheques en Circulación Global Bank ($)",
-        min_value=0.0, value=0.0, step=0.01, format="%.2f",
-        key="gb_cheques_manual",
-    )
-
+    # Cheques en circulación: visibles para ambos bancos
+    st.markdown("##### 🔲 Cheques en Circulación")
+    st.caption("Ingresa el monto de cheques emitidos pendientes de cobro en cada banco (0 si no hay):")
+    _col_ch1, _col_ch2 = st.columns(2)
+    with _col_ch1:
+        st.number_input(
+            "Cheques en Circulación Banco General ($)",
+            min_value=0.0, value=0.0, step=0.01, format="%.2f",
+            key="bg_cheques_manual",
+        )
+    with _col_ch2:
+        st.number_input(
+            "Cheques en Circulación Global Bank ($)",
+            min_value=0.0, value=0.0, step=0.01, format="%.2f",
+            key="gb_cheques_manual",
+        )
 st.markdown("---")
 
 # ════════════════════════════════════════════════════════════════════

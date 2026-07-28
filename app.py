@@ -33,7 +33,7 @@ st.set_page_config(
 CATS = [
     'Acreedores', 'Mantenimiento de Planta', 'Materia Prima',
     'Pigmento y Aditivos', 'Servicios Básicos', 'Tarimas',
-    'Transporte', 'Otros',
+    'Transporte', 'Comisiones Bancarias', 'Egresos Varios', 'Otros',
 ]
 
 # ════════════════════════════════════════════════════════════════════
@@ -157,19 +157,27 @@ if not todos_cargados:
             ("Banco General", f_bg),
         ] if not f
     ]
+    if not f_gb:
+        archivos_faltantes.append("Global Bank (opcional)")
     st.info(f"⬆️ Faltan: {', '.join(archivos_faltantes)}")
+elif not f_gb:
+    st.info("⬆️ Falta: Global Bank (opcional)")
 
 # ── Campos opcionales: solo aparecen una vez que los 3 archivos obligatorios están cargados ──
 if todos_cargados:
-    # Global Bank sin extracto: solicitar saldo anterior manualmente
+    # Global Bank sin extracto: el usuario confirma que no tiene el archivo
     if not f_gb:
-        st.markdown("##### 🏦 Global Bank — sin movimientos hoy")
-        st.caption("No se cargó extracto de Global Bank. Ingresa el saldo anterior para completar el reporte:")
-        st.number_input(
-            "Saldo Anterior Global Bank ($)",
-            min_value=0.0, value=0.0, step=0.01, format="%.2f",
-            key="gb_saldo_ant_manual",
+        no_gb = st.checkbox(
+            "No tengo extracto de Global Bank para hoy",
+            key="no_gb_check",
         )
+        if no_gb:
+            st.caption("Ingresa el saldo anterior de Global Bank para completar el reporte:")
+            st.number_input(
+                "Saldo Anterior Global Bank ($)",
+                min_value=0.0, value=0.0, step=0.01, format="%.2f",
+                key="gb_saldo_ant_manual",
+            )
 
     # Cheques en circulación: visibles para ambos bancos
     st.markdown("##### 🔲 Cheques en Circulación")

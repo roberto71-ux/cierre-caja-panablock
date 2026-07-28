@@ -227,7 +227,7 @@ if procesar:
             # Sin extracto: inyectar el saldo anterior ingresado manualmente
             if not f_gb:
                 gb['saldo_anterior'] = st.session_state.get('gb_saldo_ant_manual', 0.0)
-                log(f"  GB (sin extracto) saldo anterior: ${gb['saldo_anterior']}:,.2f}")
+                log(f"  GB (sin extracto) saldo anterior: ${gb['saldo_anterior']:,.2f}")
 
             # Guardar todo en session_state para que sobreviva el próximo clic
             st.session_state.update({

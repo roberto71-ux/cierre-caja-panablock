@@ -154,7 +154,8 @@ archivos_faltantes = [
         ("Facturas", f_fact), ("Recibos", f_rec),
         ("Banco General", f_bg),
     ] if not f
-]�f not f_gb:
+]
+if not f_gb:
     archivos_faltantes.append("Global Bank (opcional)")
 if archivos_faltantes:
     st.info(f"⬆️ Sin cargar: {', '.join(archivos_faltantes)} — se asumirán valores cero.")
@@ -199,7 +200,7 @@ st.markdown("---")
 # st.button devuelve True solo en la re-ejecución donde fue presionado.
 # En todas las demás re-ejecuciones devuelve False.
 procesar = st.button(
-    "♪�️  Procesar archivos",
+    "⚙️  Procesar archivos",
     type="primary",
     use_container_width=True,
 )

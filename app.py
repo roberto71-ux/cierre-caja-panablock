@@ -233,19 +233,6 @@ if procesar:
                 gb['saldo_anterior'] = st.session_state.get('gb_saldo_ant_manual', 0.0)
                 log(f"  GB (sin extracto) saldo anterior: ${gb['saldo_anterior']:,.2f}")
 
-            # Recopilar gastos que quedaron sin categoría (clasificados como "Otros"
-            # porque el proveedor no está en proveedores.xlsx ni en las keywords)
-            otros = (
-                [{'Banco': 'Banco General', 'Descripción': i['desc'],
-                  'Monto': i['monto'], 'Categoría': 'Otros'}
-                 for i in bg.get('gastos_detalle', []) if i['cat'] == 'Otros']
-                +
-                [{'Banco': 'Global Bank',   'Descripción': i['desc'],
-                  'Monto': i['monto'], 'Categoría': 'Otros'}
-                 for i in gb.get('gastos_detalle', []) if i['cat'] == 'Otros']
-            )
-
-            # Guardar todo en session_state para que sobreviva el próximo clic
             st.session_state.update({
                 'fact':        fact,
                 'rec':         rec,
@@ -254,7 +241,6 @@ if procesar:
                 'logs':        logs,
                 'fecha':       fecha,
                 'processed':   True,
-                'otros_df':    pd.DataFrame(otros) if otros else None,
                 'excel_bytes': None,   # borrar descarga anterior si la había
                 'pdf_bytes':   None,
                 'bg_cheques':  st.session_state.get('bg_cheques_manual', 0.0),
@@ -308,49 +294,6 @@ if st.session_state.get('processed'):
     with st.expander("📋 Ver detalle del procesamiento (log)"):
         st.code('\n'.join(st.session_state.get('logs', [])), language=None)
 
-    # ── Reclasificación de gastos "Otros" ──────────────────────────
-    # Si el clasificador no reconoció algún proveedor, le mostramos
-    # una tabla editable para que el usuario asigne la categoría correcta.
-    otros_df  = st.session_state.get('otros_df')
-    edited_df = None
-
-    if otros_df is not None and not otros_df.empty:
-        st.markdown("---")
-        st.warning(
-            f"⚠️ **{len(otros_df)} gasto(s) sin categoría reconocida.**  \n"
-            "El sistema no encontró estos proveedores en la base de datos. "
-            "Selecciona la categoría correcta en la columna derecha:"
-        )
-
-        # st.data_editor muestra una tabla interactiva donde el usuario puede
-        # cambiar el valor de la columna "Categoría" con un menú desplegable.
-        edited_df = st.data_editor(
-            otros_df,
-            column_config={
-                "Banco": st.column_config.TextColumn(
-                    "Banco", disabled=True, width="small"
-                ),
-                "Descripción": st.column_config.TextColumn(
-                    "Descripción", disabled=True, width="large"
-                ),
-                "Monto": st.column_config.NumberColumn(
-                    "Monto", format="$%.2f", disabled=True, width="small"
-                ),
-                "Categoría": st.column_config.SelectboxColumn(
-                    "Categoría ✏️",
-                    options=CATS,
-                    required=True,
-                    width="medium",
-                ),
-            },
-            use_container_width=True,
-            num_rows="fixed",
-            hide_index=True,
-        )
-        st.caption("💡 Al generar el reporte se aplicarán las categorías que "
-                   "asignaste aquí. Para que el sistema las recuerde automáticamente "
-                   "en el futuro, avísale a Roberto para actualizarlas en la base "
-                   "de datos.")
 
     # ── Botón Generar Reportes ──────────────────────────────────────
     st.markdown("---")
@@ -361,10 +304,6 @@ if st.session_state.get('processed'):
     )
 
     if generar:
-        # Aplicar las reclasificaciones del usuario (si las hay)
-        if edited_df is not None and not edited_df.empty:
-            _apply_reclassifications(bg, gb, edited_df)
-
         with st.spinner("Generando reportes…"):
             fecha_str = st.session_state['fecha'].strftime('%d/%m/%Y')
             fecha_tag = st.session_state['fecha'].strftime('%d%m%Y')

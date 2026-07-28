@@ -159,23 +159,32 @@ if not todos_cargados:
     ]
     st.info(f"⬆️ Faltan: {', '.join(archivos_faltantes)}")
 
-# ── Global Bank sin extracto: solicitar saldos manualmente ──────────────
+# ── Global Bank sin extracto: solicitar saldo anterior manualmente ──
 if not f_gb:
     st.markdown("##### 🏦 Global Bank — sin movimientos hoy")
-    st.caption("No se cargó extracto de Global Bank. Ingresa los saldos para completar el reporte:")
-    _col_gb1, _col_gb2 = st.columns(2)
-    with _col_gb1:
-        st.number_input(
-            "Saldo Anterior Global Bank ($)",
-            min_value=0.0, value=0.0, step=0.01, format="%.2f",
-            key="gb_saldo_ant_manual",
-        )
-    with _col_gb2:
-        st.number_input(
-            "Cheques en Circulación Global Bank ($)",
-            min_value=0.0, value=0.0, step=0.01, format="%.2f",
-            key="gb_cheques_manual",
-        )
+    st.caption("No se cargó extracto de Global Bank. Ingresa el saldo anterior para completar el reporte:")
+    st.number_input(
+        "Saldo Anterior Global Bank ($)",
+        min_value=0.0, value=0.0, step=0.01, format="%.2f",
+        key="gb_saldo_ant_manual",
+    )
+
+# ── Cheques en circulación: siempre visibles para ambos bancos ──
+st.markdown("##### 🔲 Cheques en Circulación")
+st.caption("Ingresa el monto de cheques emitidos pendientes de cobro en cada banco (0 si no hay):")
+_col_ch1, _col_ch2 = st.columns(2)
+with _col_ch1:
+    st.number_input(
+        "Cheques en Circulación Banco General ($)",
+        min_value=0.0, value=0.0, step=0.01, format="%.2f",
+        key="bg_cheques_manual",
+    )
+with _col_ch2:
+    st.number_input(
+        "Cheques en Circulación Global Bank ($)",
+        min_value=0.0, value=0.0, step=0.01, format="%.2f",
+        key="gb_cheques_manual",
+    )
 
 st.markdown("---")
 
@@ -238,8 +247,8 @@ if procesar:
                 'processed':   True,
                 'otros_df':    pd.DataFrame(otros) if otros else None,
                 'excel_bytes': None,   # borrar descarga anterior si la había
-                'gb_cheques':  (st.session_state.get('gb_cheques_manual', 0.0)
-                                if not f_gb else 0.0),
+                'bg_cheques':  st.session_state.get('bg_cheques_manual', 0.0),
+                'gb_cheques':  st.session_state.get('gb_cheques_manual', 0.0),
             })
 
         except Exception as e:
@@ -257,14 +266,14 @@ if st.session_state.get('processed'):
     bg   = st.session_state['bg']
     gb   = st.session_state['gb']
 
-    st.success("✅ Archivos procesados correctamente.")
+    st.success("� Archivos procesados correctamente.")
 
     # ── Resumen rápido ──────────────────────────────────────────────
     st.markdown("#### Resumen del día")
 
     total_contado  = round(fact['contado_subtotal'] + fact['contado_itbms'], 2)
     total_credito  = round(fact['credito_subtotal'] + fact['credito_itbms'], 2)
-    gastos_merged  = _merge_gastos(bg['gastos'], gb['gastos'])
+    gastos_merged  = _merge_gastos(bg['gastos'], gb['astos'])
     total_gastos   = round(sum(gastos_merged.values()), 2)
 
     # Fila 1: Ventas + Cobros + Gastos
@@ -282,7 +291,7 @@ if st.session_state.get('processed'):
     # Alerta si hay notas de crédito
     ncs = fact.get('notas_credito', [])
     if ncs:
-        st.warning(f"⚠️ {len(ncs)} nota(s) de crédito detectada(s) — "
+        st.warning(f"⚠️ {len(ncs)} nota(s) de crédito detectada(s) —"
                    "aparecen en la sección roja al final del reporte Excel.")
 
     # ── Log de procesamiento ────────────────────────────────────────
@@ -356,6 +365,7 @@ if st.session_state.get('processed'):
                     bg=bg,
                     gb=gb,
                     output_path=None,   # None → retorna BytesIO para descarga web
+                    cheques_bg=st.session_state.get('bg_cheques', 0.0),
                     cheques_gb=st.session_state.get('gb_cheques', 0.0),
                     cobros_por_forma=rec['por_forma'],
                 )
